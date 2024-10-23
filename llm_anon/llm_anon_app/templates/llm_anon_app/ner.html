@@ -1,0 +1,250 @@
+{% extends "llm_anon_app/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}DataMask - NER{% endblock %}
+
+{% block content %}
+<!-- <h1>Session: {{ session.session_id }}</h1> -->
+<br> 
+
+<h3><b>Input</b></h3>
+<form action="{% url 'llm_anon_app:ner' session.session_id %}" method="post" onsubmit="validate()">
+    {% csrf_token %}
+    {{ form|crispy }}
+    <div class="d-flex flex-row">
+        <input class="btn btn-dark text-light" type="submit" value="Submit">
+        <button id="use_case_dropdown" type="button" class="btn btn-dark text-light dropdown-toggle ms-2" data-bs-toggle="dropdown" aria-expanded="false">Choose Use Case</button>
+        <ul class="dropdown-menu">
+            <li><h6 class="dropdown-header">Use Cases</h6></li>
+            {% for use_case in use_cases %}
+                <li><a class="dropdown-item {% if session.use_case == use_case %} active {% endif %}" href="#" onclick="update_uc()">{{ use_case.use_case }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+</form>
+
+<hr id="below_submit">
+
+<script>
+    function update_uc() {
+        let use_case = event.target.text;
+        $(".active").removeClass('active');
+        event.target.classList.add('active');
+        $("#id_use_case").val(use_case);
+        if ($(".alert")) {
+            $(".alert").remove();
+        }
+    }
+
+    function validate() {
+        let use_case = $("#id_use_case").val();
+        if (use_case == "") {
+            if ($(".alert")) {
+                $(".alert").remove();
+            }
+            $("#below_submit").after('<div class=\'alert alert-danger mt-4\'>Please select a use case</div>');
+            event.preventDefault();
+        }
+        else {
+            $("#use_case_dropdown").after('<div class="spinner-border text-dark ms-auto" role="status"></div>')
+        }
+    }
+</script>
+
+{% if initial_input.input_text %}
+
+<p id="input_text">{{ initial_input.input_text|linebreaksbr }}</p> 
+
+<hr>
+
+<div class="row">
+    <p class="text-secondary fst-italic">Missing an entity? Highlight the word(s) and then: </p> 
+    <div class="col-4">
+        <div class="input-group">
+            <select class="form-select" id="entity_type" aria-label="Default select example">
+                <option value="PERSON">Person</option>
+                <option value="ORGANIZATION">Organization</option>
+                <option value="LOCATION">Location</option>
+                <option value="DATE">Date</option>
+                <option value="TIME">Time</option>
+                <option value="GPE">GPE</option>
+                <option value="MONEY">Money</option>
+                <option value="PERCENT">Percent</option>
+                <option value="QUANTITY">Quantity</option>
+                <option value="ORDINAL">Ordinal</option>
+                <option value="CARDINAL">Cardinal</option>
+                <!-- <option value="EVENT">Event</option> -->
+                <!-- <option value="WORK_OF_ART">Work of Art</option> -->
+            </select>
+            <button type="button" class="btn btn-dark text-light" onclick="getSelectedText()">Add Entity</button>
+        </div>  
+    </div>
+    <div class="col-8">
+        <a class="btn btn-dark text-light float-end" href="{% url 'llm_anon_app:masking' session.session_id %}">Next: Masking</a>
+    </div>
+</div>
+
+<h3 class="pt-4"><b>Entities</b></h3>
+<table class="table table-striped" id="entity_table">
+    <thead>
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Entity Type</th>
+            <th scope="col">Count</th>
+            <th scope="col">Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for name, entity in ner_dict.items %}
+        <tr id='entity_{{ name }}'>
+            <td>{{ name }}</td>
+            <td value="{{ entity.entity_type }}"><button type="button" class="btn" id="entity_{{ name }}_type">{{ entity.entity_type }}</button></td>
+            <td value="{{ entity.count }}">{{ entity.count }}</td>
+            <td>
+                <!-- <a href="{% url 'llm_anon_app:ner' session.session_id %}">Edit</a> -->
+                <!-- <a href="{% url 'llm_anon_app:ner' session.session_id %}">Delete</a> -->
+                <button type="button" class="btn btn-outline-danger" onclick="removeItem('{{ name }}')">Delete</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+    // Process the NER dictionary to update the database
+    var ner_dict = {{ ner_dict|safe }};
+    console.log(ner_dict);
+
+    // ajax call to send updated dictionary via POST to url: ner_dict_update
+    function updateNERDict() {
+        $.ajax({
+            type: 'POST',
+            url: '{% url "llm_anon_app:ner_dict_update" %}',
+            data: {
+                'ner_dict': JSON.stringify(ner_dict),
+                'session_id': '{{ session.session_id }}',
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                console.log(response);
+            },
+            error: function(response) {
+                console.log(response);
+            }
+        });
+    }
+
+    var colormap = {
+        'PERSON': '#ffadad',
+        'ORGANIZATION': '#ffd6a5',
+        'GPE': '#fdffb6',
+        'DATE': '#caffbf',
+        'TIME': '#9bf6ff',
+        'MONEY': '#ffd6a5',
+        'PERCENT': '#bdb2ff',
+        'QUANTITY': '#ffc6ff',
+        'ORDINAL': '#ffadad',
+        'CARDINAL': '#a0c4ff',
+        'LOCATION': '#ffc6ff',
+        // 'EVENT': 'olive',
+        // 'WORK_OF_ART': 'navy'
+    };
+
+    // function to color text based on the entity type (ignore case for now)
+    function colorText() {
+        var text = document.getElementById('input_text').innerHTML;
+        
+        // reset input text first to the initial_input.input_text
+        text = '{{ initial_input.input_text|linebreaksbr }}';
+
+        for (var name in ner_dict) {
+            var entity = ner_dict[name];
+            var entity_type = entity.entity_type.toUpperCase();
+            var count = entity.count;
+            var color = colormap[entity_type];
+            var re = new RegExp('(?<!\\w)' + name + '(?!\\w)', 'gi');
+            // if entity type is person, location or organization, make the name captilized in front
+            var new_name = name;
+            if (entity_type == 'PERSON' || entity_type == 'LOCATION' || entity_type == 'ORGANIZATION' || entity_type == 'DATE') {
+                new_name = name.charAt(0).toUpperCase() + name.slice(1);
+            }
+            text = text.replace(re, '<button type="button" class="btn" style="background-color:' + color + ';" onclick="removeItem(\'' + name + '\')">' + new_name + '</button>');
+        }
+        document.getElementById('input_text').innerHTML = text;
+    }
+
+    // function to color buttons in the table too based on their entity type
+    function colorButtons() {
+        for (var name in ner_dict) {
+            var entity = ner_dict[name];
+            var entity_type = entity.entity_type.toUpperCase();
+            var color = colormap[entity_type];
+            var button = document.getElementById('entity_' + name + '_type');
+            button.style.backgroundColor = color;
+        }
+    }
+
+    colorText();  // color the text based on the entity type
+    colorButtons();  // color the buttons in the table based on the entity type
+
+    var entity_dt = new DataTable(document.getElementById('entity_table'), {
+        searchable: true,
+        fixedHeight: true,
+        sortable: true,
+        order: [],
+    });
+
+    // function for removing item if deleted is clicked
+    function removeItem(name) {
+        delete ner_dict[name];
+        // document.getElementById('entity_' + name).remove();
+        entity_dt.rows('#entity_' + name).remove().draw();
+        console.log("Removed " + name + " from ner_dict");
+        colorText();  // update the text color
+        updateNERDict();  // update the database
+    }
+
+    // function to get what was selected in the input_text display
+    function getSelectedText() {
+        var text = document.getElementById('input_text').innerHTML;
+        var selection = window.getSelection();
+        var selected_text = selection.toString();
+        // lowercase the selected text
+        selected_text = selected_text.toLowerCase();
+
+        // alert if empty
+        if (selected_text == '') {
+            alert('Please select a word or phrase to add as an entity!');
+            return;
+        }
+
+        // TODO: alert if the text is preceeded or followed by a word character
+
+        var entity_type = document.getElementById('entity_type').value;
+        console.log('Selected text: ' + selected_text + ', Entity type: ' + entity_type);
+
+        if (selected_text in ner_dict) {
+            alert('Entity already exists!');
+            return;
+        } else {
+            ner_dict[selected_text] = {
+                'entity_type': entity_type,
+                'count': 1
+            };
+            entity_dt.row.add([
+                selected_text, 
+                '<button type="button" class="btn" id="entity_' + selected_text + '_type" style="background-color:' + colormap[entity_type] + ';">' + entity_type + '</button>',
+                1, 
+                '<button type="button" class="btn btn-outline-danger" onclick="removeItem(\'' + selected_text + '\')">Delete</button>'
+            ]).draw();
+            console.log("Added " + selected_text + " to ner_dict");
+            colorText();  // update the text color
+            updateNERDict();  // update the database
+        }
+    }
+
+</script>
+    
+{% endif %}
+
+{% endblock content %}

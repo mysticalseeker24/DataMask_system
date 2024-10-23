@@ -1,0 +1,137 @@
+{% extends "llm_anon_app/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}DataMask - Evaluation{% endblock %}
+
+{% block content %}
+    
+<!-- <h1>Session: {{ session.session_id }}</h1> -->
+
+<br>
+
+<!-- <div class="container"> -->
+
+<h3><b> Masked Input</b></h3>
+<div class="ps-1 bg-light border border-3 rounded"> {{ anon_input.anon_input_text|safe|linebreaksbr }} </div>
+
+<br>
+
+{% if anon_output|length > 1 %}
+        <div class="row">
+            {% for output in anon_output %}
+            <div class="col">
+                <h2><b> LLM Output {{ forloop.counter }} </b></h2>
+                <div class="ps-1 bg-light border border-3 rounded"> {{ output.llm_output_text|safe|linebreaksbr }} </div>
+            </div>
+            {% endfor %}
+        </div>
+{% else %}
+
+    <div class="row">
+        <div class="col">
+            <h3><b> LLM Output </b></h3>
+            <div class="ps-1 bg-light border border-3 rounded"> {{ anon_output.first.llm_output_text|safe|linebreaksbr }} </div>
+        </div>
+    </div>
+
+{% endif %}
+
+<br>
+
+<form id="qa">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Question</th>
+                <th>Answer</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for question in questions %}
+            <tr>
+                <td class="col-6">{{ question.question_text }}</td>
+                <td class="col-6"><textarea rows="5" style="resize:none;height:100%;" id="question_{{ question.id }}" class="form-control"></textarea></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <button type="submit" class="btn btn-dark text-light"> Submit </button>
+</form>
+<br>
+<br>
+<h2> Previous Answers </h2>
+<table id="answers_table" class="table table-striped">
+    <thead>
+        <tr>
+            <th>Question</th>
+            <th>Answer</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for answer in answers %}
+        <tr>
+            <td class="col-6">{{ answer.question }}</td>
+            <td class="col-6">{{ answer.answer_text }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- </div> -->
+
+<br>
+<br>
+
+<script>
+    $("#qa").on("submit", function (event) {
+        event.preventDefault();
+        let data = {};
+        data["answers"] = [];
+        {% for question in questions %}
+        data["answers"].push({"question_text" : "{{question.question_text}}", "question_id": "{{ question.id }}", "answer_text": $("#question_{{ question.id }}").val()});
+        {% endfor %}
+        data["session_id"] = "{{ session.session_id }}";
+
+        // Remove empty answers
+        data["answers"] = data["answers"].filter(function (answer) {
+            return answer["answer_text"] != "";
+        });
+
+        // Check if at least one answer is provided. Don't make the request if no answers
+        if (data["answers"].length == 0) {
+            if ($(".alert")) {
+                $(".alert").remove();
+            }
+            $("#qa").after('<div class=\'alert alert-warning mt-4\'>Please answer at least one question</div>');
+            return;
+        }        
+
+        $.ajax({
+            type: "POST",
+            url: "{% url 'llm_anon_app:insert_evaluation_answer' %}",
+            headers : { "X-CSRFToken": '{{ csrf_token }}' },
+            data: JSON.stringify(data),
+            contentType: 'application/json; charset=utf-8',
+            dataType: 'json',
+            success: function (response) {
+                if ($(".alert")) {
+                    $(".alert").remove();
+                }
+                $("#qa").after('<div class=\'alert alert-success mt-4\'>Answers submitted successfully</div>');
+                data["answers"].forEach(function (answer) {
+                    $("#answers_table tbody").prepend("<tr><td class='col-6'>" + answer["question_text"] + "</td><td class='col-6'>" + answer["answer_text"] + "</td></tr>");
+                });
+                $("#qa").trigger("reset");
+            },
+            error: function (response) {
+                if ($(".alert")) {
+                    $(".alert").remove();
+                }
+                $("#qa").after('<div class=\'alert alert-danger mt-4\'>Error submitting answers</div>');
+                console.log(response);
+            }
+        });
+    })
+</script>
+
+{% endblock %}

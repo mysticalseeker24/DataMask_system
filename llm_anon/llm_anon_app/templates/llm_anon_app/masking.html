@@ -1,0 +1,267 @@
+{% extends "llm_anon_app/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}DataMask - NER{% endblock %}
+
+{% block content %}
+<!-- <h1>Session: {{ session.session_id }}</h1> -->
+<br> 
+
+{% if initial_input.input_text %}
+
+<!-- <button type="button" class="btn btn-dark text-light" onclick="create_choices()">Start making choices</button> -->
+
+<h3 class="pt-4"><b>Mask Choices</b></h3>
+<table class="table table-striped align-baseline table-fit" id="entity_table">
+    <thead>
+        <tr>
+            <th scope="col">Entity Type</th>
+            <th scope="col">Masking Level</th>
+            <th scope="col">Risk Level</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for type, level in choice_dict.items %}
+        <tr>
+            <td value="{{ type }}" style="width: 28%">
+              <button type="button" class="btn" id="entity_{{ type }}_type">{{ type }}</button></td>
+            <td style="width: 36%">
+              <div class="input-group">
+                <select class="form-select" id="{{ type }}" value="{{ level }}">
+                    <option value="None" >None</option>
+                    <option value= "Complete Mask" id="mask_{{ type }}">Complete Mask</option>
+                    <option value= "Perturb" id="perturb_{{ type }}" >Perturb</option>
+                    <option value= "Group-based" id="group_based_{{ type }}">Group-based</option>
+                </select>
+              </div>  
+            </td>
+            <td style="width: 36%">
+              <div class="progress">
+                <div class="progress-bar" role="progressbar"  aria-valuemin="0" aria-valuemax="100" id="progress_{{ type }}"></div>
+              </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<hr>
+<h3><b>Pre-masked Input</b></h3>
+
+<p id="input_text">{{ initial_input.input_text|linebreaksbr }}</p> 
+<hr>
+
+<button type="button" id = "mask_btn" class="btn btn-dark text-light" onclick="update_mask()">Mask</button>
+<hr>
+
+<h3><b>Post-masked Input</b></h3>
+<p id="masked_output">{{ anon_input.anon_input_text|safe|linebreaksbr }}</p> 
+<hr>
+
+<div class="d-flex flex-row justify-content-end">
+  <div id="send_to_llm" class="p-2 btn-md btn-dark text-light rounded" onclick="send_to_llm()">Next: Evaluation</div>
+</div>
+
+<br>
+<br>
+
+
+<script>
+  var ner_dict = {{ ner_dict|safe }};
+  var choice_dict = {{ choice_dict|safe }};
+
+  function reload() {
+    location.reload();
+  }
+
+  
+  function create_choices() {
+    $.ajax({
+            type: 'POST',
+            url: '{% url "llm_anon_app:create_choices" %}',
+            data: {
+                'ner_dict': JSON.stringify(ner_dict),
+                'session_id': '{{ session.session_id }}',
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+              reload();
+                console.log(response);
+            },
+            error: function(response) {
+                console.log(response);
+            }
+    });
+  };
+
+  function perform_masking() {
+        event.preventDefault();
+        $.ajax({
+            type: 'POST',
+            url: "{% url 'llm_anon_app:perform_masking' %}",
+            data: {
+                'ner_dict': JSON.stringify(ner_dict),
+                'choice_dict': JSON.stringify(choice_dict),
+                'session_id': '{{ session.session_id }}',
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                console.log(response);
+                history.go(0)
+
+            },
+            error: function(response) {
+                console.log(response);
+            }
+        });
+
+    }
+  function update_mask() {
+    
+    for (var type in choice_dict) {
+      var entity_type = document.getElementById(type).value;
+      choice_dict[type] = entity_type; 
+    }
+    perform_masking();
+  };
+  var disablemap = {
+        'PERSON': {"Perturb": false, "Group-based": false},
+        'ORGANIZATION': {"Perturb": false, "Group-based": false},
+        'GPE': {"Perturb": false, "Group-based": false},
+        'DATE': {"Perturb": false, "Group-based": false},
+        'TIME': {"Perturb": false, "Group-based": false},
+        'MONEY': {"Perturb": false, "Group-based": false},
+        'PERCENT': {"Perturb": false, "Group-based": true},
+        'QUANTITY': {"Perturb": false, "Group-based": false},
+        'ORDINAL': {"Perturb": false, "Group-based": false},
+        'CARDINAL': {"Perturb": false, "Group-based": false},
+        'LOCATION': {"Perturb": false, "Group-based": false},
+    };
+    
+  function disable() {
+    for (var type in choice_dict) {
+      var op = document.getElementById(type).getElementsByTagName("option");
+      for (var i = 0; i < op.length; i++) {
+        (disablemap[type][op[i].value] == false) 
+          ? op[i].disabled = true 
+          : op[i].disabled = false ;
+      }
+    }
+
+  }
+  // disable();
+  // 0-33: bg-success
+  // 34-66: bg-warning
+  //66-100: bg-danger
+  var riskmap = {
+        'PERSON': ["100", "bg-danger"],
+        'ORGANIZATION': ["87", "bg-danger"],
+        'GPE': ["25", "bg-success"],
+        'DATE': ["62", "bg-warning"],
+        'TIME': ["40", "bg-warning"],
+        'MONEY': ["45", "bg-warning"],
+        'PERCENT': ["10", "bg-success"],
+        'QUANTITY': ["65", "bg-warning"],
+        'ORDINAL': ["30", "bg-success"],
+        'CARDINAL': ["27", "bg-success"],
+        'LOCATION': ["82", "bg-danger"],
+    };
+  function riskLevel() {
+    for (var entity_type in choice_dict) {
+            var risk = riskmap[entity_type][0];
+            var risk_type = riskmap[entity_type][1];
+            var progress = document.getElementById('progress_' + entity_type);
+            progress.style.width = risk + "%";
+            progress.ariaValueNow = risk;
+            progress.classList.add(risk_type);
+            progress.innerText = risk + "%";
+    }
+  };
+  riskLevel();
+  
+  function reflect_choices() {
+    for (var type in choice_dict) {
+      document.getElementById(type).value = choice_dict[type]
+    }
+  };
+  reflect_choices();
+
+  var colormap = {
+        'PERSON': '#ffadad',
+        'ORGANIZATION': '#ffd6a5',
+        'GPE': '#fdffb6',
+        'DATE': '#caffbf',
+        'TIME': '#9bf6ff',
+        'MONEY': '#ffd6a5',
+        'PERCENT': '#bdb2ff',
+        'QUANTITY': '#ffc6ff',
+        'ORDINAL': '#ffadad',
+        'CARDINAL': '#a0c4ff',
+        'LOCATION': '#ffc6ff',
+        // 'EVENT': 'olive',
+        // 'WORK_OF_ART': 'navy'
+    };
+    function color_entities() {
+        for (var type in choice_dict) {
+            var button = document.getElementById('entity_' + type + '_type');
+            button.style.backgroundColor = colormap[type];
+        }
+    }
+  color_entities();
+  function colorText() {
+        var text = document.getElementById('input_text').innerHTML;
+        
+        // reset input text first to the initial_input.input_text
+        text = '{{ initial_input.input_text|linebreaksbr }}';
+
+        for (var name in ner_dict) {
+            var entity = ner_dict[name];
+            var entity_type = entity.entity_type.toUpperCase();
+            var count = entity.count;
+            var color = colormap[entity_type];
+            var re = new RegExp('(?<!\\w)' + name + '(?!\\w)', 'gi');
+            // if entity type is person, location or organization, make the name captilized in front
+            var new_name = name;
+            if (entity_type == 'PERSON' || entity_type == 'LOCATION' || entity_type == 'ORGANIZATION' || entity_type == 'DATE') {
+                new_name = name.charAt(0).toUpperCase() + name.slice(1);
+            }
+            text = text.replace(re, '<button type="button" class="btn" style="background-color:' + color + ';" onclick="removeItem(\'' + name + '\')">' + new_name + '</button>');
+        }
+        document.getElementById('input_text').innerHTML = text;
+    }
+    colorText();
+
+  function send_to_llm(){
+    
+    $("#send_to_llm").before('<div class="spinner-border text-dark me-4 mt-1" role="status"></div>')
+
+    $.ajax({
+            type: 'POST',
+            url: "{% url 'llm_anon_app:send_to_llm' %}",
+            data: {
+                'session_id': '{{ session.session_id }}',
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                console.log(response);
+                window.location.href = "{% url 'llm_anon_app:evaluation' session.session_id %}";
+            },
+            error: function(response) {
+                console.log(response);
+                if ($(".alert-md")) {
+                  $(".alert-md").remove();
+                }
+                if($(".spinner-border")){
+                  $(".spinner-border").remove();
+                }
+                $("#send_to_llm").before('<div class=\'alert-md alert-danger p-2 rounded me-2\'>Error submitting answers</div>');
+            }
+          });
+  };
+
+</script>
+
+{% endif %}
+
+{% endblock content %}

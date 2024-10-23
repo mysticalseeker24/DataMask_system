@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>{% block title %}{% endblock %}</title>
+    {% load bootstrap5 %}
+    {% bootstrap_css %}
+    {% bootstrap_javascript %}
+    {% load static %}
+    <!-- add jquery -->
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.7.1.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/2.0.3/js/dataTables.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/2.0.3/js/dataTables.bootstrap5.js"></script>
+    <link rel="shortcut icon" type="image/png" href="{% static 'favicon_io/favicon-32x32.png' %}" >
+
+</head>
+<body>
+
+<div class="container">
+  <ul class="nav navbar-expand-lg bg-dark mb-3 align-content-center">
+    <a class="mx-4 my-1 navbar-brand" href="#">
+      <img src="{% static 'dm_logo.png' %}" alt="" width="50" height="40">
+    </a>
+    <a class="navbar-brand text-light my-2" href="#">DataMask</a>
+    <div class="collapse navbar-collapse justify-content-end">
+        <li class="nav-item">
+        <a class="nav-link link-light" href="{% url 'llm_anon_app:ner' %}">New Session</a>
+        </li>
+        <li class="nav-item">
+        <a class="nav-link link-light" href="{% url 'llm_anon_app:ner' session.session_id %}">NER</a>
+        </li>
+        <li class="nav-item">
+        <a class="nav-link link-light" href="{% url 'llm_anon_app:masking' session.session_id %}">Masking</a>
+        </li>
+        <li class="nav-item">
+        <a class="nav-link link-light" href="{% url 'llm_anon_app:evaluation' session.session_id %}">Evaluation</a>
+        </li>
+    </div>
+  </ul>
+
+  {% block content %}
+  {% endblock %}
+</div>
+</body>
+</html>
