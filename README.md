@@ -9,9 +9,8 @@ Human-AI Anonymization for Trust
 
 
 ## Inspiration
-One of our teammates (Chris) previously started an LLM-based mental health startup last year. They were selling to HR leaders across the globe! The leaders really liked the solution, from Fortune 500 companies to startups, and even the Navy sent their HR team to their doorstep. However, they couldn't reach enterprise-wide deployment despite contracts being signed to experiment with all these companies in a vacuum. This was because of the larger (and evolving) worry of data privacy - every single company worried that their data or the data of their clients would be potentially leaked, used, or abused by the LLMs that the startup was based on. And as we found out, they weren't alone...
 
-The complexity of anonymizing data WHILE preserving context to be useful to LLMs became a huge issue (and idea!) in itself, and that's where this idea came from.
+As the use of large language models (LLMs) continues to grow across industries, B2B companies face significant challenges in deploying these powerful tools while ensuring compliance with data privacy regulations. Traditional data anonymization methods often strip away essential context, reducing the effectiveness of LLM-based products and services. This is particularly problematic in sectors with heightened privacy concerns, where building customer trust is paramount. Fear of violating regulations and potential data misuse can slow down innovation and limit the potential of LLMs. DataMask aims to address these challenges by providing a context-aware data anonymization layer for LLMs.
 
 ## What It Does
 PII Data Masking is a privacy-preserving solution that utilizes locally (cloud) hosted language models to identify and replace sensitive personal information within datasets. By assessing the context and importance of the redacted data, the system generates non-identifiable alternatives that maintain the semantic integrity and analytical value of the original text. This innovative approach ensures data privacy while preserving the usefulness of the dataset for analysis and insights.
